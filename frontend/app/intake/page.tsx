@@ -761,11 +761,13 @@ function Step5({ form, set }: { form: FormState; set: (k: keyof FormState, v: un
 function PaymentWall({
   form,
   priceConfig,
+  submissionId,
   onPaymentSuccess,
   onBack,
 }: {
   form: FormState;
   priceConfig: PriceConfigData | null;
+  submissionId: number;
   onPaymentSuccess: (paymentId?: string) => void;
   onBack: () => void;
 }) {
@@ -786,7 +788,7 @@ function PaymentWall({
       const orderRes = await fetch("/api/payment/create-order", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ submission_id: 0 }),
+        body: JSON.stringify({ submission_id: submissionId }),
       });
       if (!orderRes.ok) throw new Error("Failed to create order");
       const order = await orderRes.json();
@@ -821,7 +823,7 @@ function PaymentWall({
                   razorpay_payment_id: response.razorpay_payment_id,
                   razorpay_order_id: response.razorpay_order_id,
                   razorpay_signature: response.razorpay_signature,
-                  submission_id: 0,
+                  submission_id: submissionId,
                 }),
               });
               if (!verifyRes.ok) throw new Error("Payment verification failed");
@@ -996,6 +998,7 @@ function IntakeContent() {
   const [submitted, setSubmitted] = useState(false);
   const [submitData, setSubmitData] = useState<Record<string, unknown>>({});
   const [showPayment, setShowPayment] = useState(false);
+  const [submissionId, setSubmissionId] = useState<number>(0);
   const [priceConfig, setPriceConfig] = useState<PriceConfigData | null>(null);
 
   // Fetch price config on mount
@@ -1049,12 +1052,74 @@ function IntakeContent() {
     return true;
   };
 
-  const handleNext = () => {
+  const handleNext = async () => {
     if (!validateStep()) return;
     if (step < 5) {
       setStep(s => s + 1);
-    } else if (step === 5) {
+      return;
+    }
+    // Step 5: submit form first, then show payment wall
+    if (!priceConfig?.payment_enabled) {
+      // No payment configured — submit directly
+      handleSubmit();
+      return;
+    }
+    setLoading(true);
+    try {
+      const conditions = [...form.medical_conditions];
+      if (form.other_condition.trim()) conditions.push(form.other_condition.trim());
+      const allergies = [...form.food_allergies];
+      if (form.other_allergy.trim()) allergies.push(form.other_allergy.trim());
+      const payload = {
+        step1: {
+          full_name: form.full_name.trim(), age: parseInt(form.age), gender: form.gender,
+          height_cm: getHeightCm(), weight_kg: getWeightKg(), goal: form.goal,
+          target_weight_kg: form.target_weight_kg ? parseFloat(form.target_weight_kg) : null,
+          timeline: form.timeline || null, email: form.email || null, phone: form.phone || null,
+        },
+        step2: {
+          medical_conditions: conditions.filter(c => c !== "None"),
+          current_medications: form.current_medications || null,
+          food_allergies: allergies.filter(a => a !== "None"),
+          digestive_issues: form.digestive_issues, digestive_description: form.digestive_description || null,
+          menstrual_irregularities: form.menstrual_irregularities, is_pregnant: form.is_pregnant, is_breastfeeding: form.is_breastfeeding,
+        },
+        step3: {
+          activity_level: form.activity_level, exercise_preference: form.exercise_preference,
+          exercise_type: form.exercise_type || null, exercise_frequency: form.exercise_frequency || null,
+          sleep_hours: form.sleep_hours ? parseFloat(form.sleep_hours) : null,
+          stress_level: form.stress_level || null, work_type: form.work_type || null,
+          meals_per_day: form.meals_per_day ? parseInt(form.meals_per_day) : null, meal_timings: form.meal_timings || null,
+        },
+        step4: {
+          diet_type: form.diet_type, food_dislikes: form.food_dislikes || null,
+          cuisine_preference: form.cuisine_preference, city: form.city || null,
+          state: form.state || null, cooking_situation: form.cooking_situation || null,
+        },
+        step5: {
+          current_diet_description: form.current_diet_description || null,
+          water_intake_liters: form.water_intake_liters ? parseFloat(form.water_intake_liters) : null,
+          current_supplements: form.current_supplements || null,
+          alcohol_habit: form.alcohol_habit, smoking_habit: form.smoking_habit,
+          protein_intake_level: form.protein_intake_level || null,
+        },
+      };
+      const res = await intakeApi.submit(payload);
+      setSubmitData(res.data);
+      setSubmissionId(res.data.id ?? 0);
       setShowPayment(true);
+    } catch (err: unknown) {
+      const error = err as { response?: { data?: { detail?: unknown } }; message?: string };
+      const detail = error?.response?.data?.detail;
+      let msg = "Submission failed. Please try again.";
+      if (typeof detail === "string") msg = detail;
+      else if (Array.isArray(detail) && detail.length > 0) {
+        const first = detail[0] as { msg?: string; loc?: string[] };
+        msg = first.msg || msg;
+      }
+      toast.error(msg);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -1152,9 +1217,10 @@ function IntakeContent() {
       <PaymentWall
         form={form}
         priceConfig={priceConfig}
+        submissionId={submissionId}
         onPaymentSuccess={(_paymentId) => {
           setShowPayment(false);
-          handleSubmit();
+          setSubmitted(true);
         }}
         onBack={() => setShowPayment(false)}
       />
