@@ -11,7 +11,7 @@ import { intakeApi } from "@/lib/api";
 
 interface PriceConfigData {
   active_price_inr: number;
-  max_price_inr: number;
+  original_price_inr: number;
   discount_pct: number;
   razorpay_key_id: string;
   payment_enabled: boolean;
