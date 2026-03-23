@@ -55,8 +55,8 @@ export const adminApi = {
   getPriceConfig: (token: string) =>
     api.get("/api/admin/price-config", { headers: { Authorization: `Bearer ${token}` } }),
 
-  updatePriceConfig: (token: string, price: number) =>
-    api.put("/api/admin/price-config", { active_price_inr: price }, { headers: { Authorization: `Bearer ${token}` } }),
+  updatePriceConfig: (token: string, price: number, originalPrice: number = 0) =>
+    api.put("/api/admin/price-config", { active_price_inr: price, original_price_inr: originalPrice }, { headers: { Authorization: `Bearer ${token}` } }),
 };
 
 export const intakeApi = {

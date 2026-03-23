@@ -32,7 +32,8 @@ class ChatRequest(BaseModel):
 
 
 class PriceConfig(BaseModel):
-    active_price_inr: int  # 1499, 1999, or 2999
+    active_price_inr: int   # actual charge amount (min 10)
+    original_price_inr: int = 0  # shown as strikethrough (0 = no strikethrough)
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/admin", tags=["Admin"])
@@ -734,25 +735,23 @@ async def get_price_config(db: AsyncSession = Depends(get_db), _: str = Depends(
     result = await db.execute(select(AppSettings).where(AppSettings.key == "active_price_inr"))
     setting = result.scalar_one_or_none()
     price_inr = int(setting.value) if setting else 1999
-    max_price = 2999
-    discount_pct = round((max_price - price_inr) / max_price * 100) if price_inr < max_price else 0
+    # Get custom max price (original price shown as strikethrough)
+    max_result = await db.execute(select(AppSettings).where(AppSettings.key == "original_price_inr"))
+    max_setting = max_result.scalar_one_or_none()
+    original_price = int(max_setting.value) if max_setting else 0
+    discount_pct = round((original_price - price_inr) / original_price * 100) if original_price > price_inr > 0 else 0
     return {
         "active_price_inr": price_inr,
-        "max_price_inr": max_price,
+        "original_price_inr": original_price,
         "discount_pct": discount_pct,
-        "prices": [
-            {"inr": 1499, "label": "Basic", "usd": 18, "eur": 16, "gbp": 14, "aed": 67, "sgd": 24},
-            {"inr": 1999, "label": "Standard", "usd": 24, "eur": 22, "gbp": 19, "aed": 89, "sgd": 33},
-            {"inr": 2999, "label": "Premium", "usd": 36, "eur": 33, "gbp": 28, "aed": 134, "sgd": 49},
-        ],
     }
 
 
 @router.put("/price-config")
 async def update_price_config(config: PriceConfig, db: AsyncSession = Depends(get_db), _: str = Depends(verify_token)):
-    """Update active price. Must be 1499, 1999, or 2999."""
-    if config.active_price_inr not in [1499, 1999, 2999]:
-        raise HTTPException(status_code=400, detail="Price must be 1499, 1999, or 2999")
+    """Update active price. Any amount from 10 to 99999."""
+    if config.active_price_inr < 10 or config.active_price_inr > 99999:
+        raise HTTPException(status_code=400, detail="Price must be between 10 and 99999")
     from models.database import AppSettings
     result = await db.execute(select(AppSettings).where(AppSettings.key == "active_price_inr"))
     setting = result.scalar_one_or_none()
@@ -760,5 +759,12 @@ async def update_price_config(config: PriceConfig, db: AsyncSession = Depends(ge
         setting.value = str(config.active_price_inr)
     else:
         db.add(AppSettings(key="active_price_inr", value=str(config.active_price_inr)))
+    # Save original price (strikethrough)
+    orig_result = await db.execute(select(AppSettings).where(AppSettings.key == "original_price_inr"))
+    orig_setting = orig_result.scalar_one_or_none()
+    if orig_setting:
+        orig_setting.value = str(config.original_price_inr)
+    else:
+        db.add(AppSettings(key="original_price_inr", value=str(config.original_price_inr)))
     await db.commit()
-    return {"success": True, "active_price_inr": config.active_price_inr}
+    return {"success": True, "active_price_inr": config.active_price_inr, "original_price_inr": config.original_price_inr}

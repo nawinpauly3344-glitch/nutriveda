@@ -743,28 +743,32 @@ function InfoCard({ label, value }: { label: string; value: string }) {
 
 // ─── Pricing Panel ────────────────────────────────────────────────────────────
 
-interface PriceOption { inr: number; label: string; usd: number; eur: number; gbp: number; aed: number; sgd: number; }
-interface AdminPriceConfig { active_price_inr: number; max_price_inr: number; discount_pct: number; prices: PriceOption[]; }
+interface AdminPriceConfig { active_price_inr: number; original_price_inr: number; discount_pct: number; }
 
 function PricingPanel({ token }: { token: string }) {
   const [config, setConfig] = useState<AdminPriceConfig | null>(null);
-  const [selected, setSelected] = useState<number>(1999);
+  const [price, setPrice] = useState<string>("1999");
+  const [originalPrice, setOriginalPrice] = useState<string>("0");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     adminApi.getPriceConfig(token)
       .then(r => {
         setConfig(r.data);
-        setSelected(r.data.active_price_inr);
+        setPrice(String(r.data.active_price_inr));
+        setOriginalPrice(String(r.data.original_price_inr || 0));
       })
       .catch(() => {});
   }, [token]);
 
   const handleSave = async () => {
+    const priceNum = parseInt(price);
+    const origNum = parseInt(originalPrice) || 0;
+    if (isNaN(priceNum) || priceNum < 10) { toast.error("Price must be at least ₹10"); return; }
     setSaving(true);
     try {
-      await adminApi.updatePriceConfig(token, selected);
-      toast.success("Price updated successfully!");
+      await adminApi.updatePriceConfig(token, priceNum, origNum);
+      toast.success("Price updated!");
       adminApi.getPriceConfig(token).then(r => setConfig(r.data)).catch(() => {});
     } catch {
       toast.error("Failed to update price.");
@@ -773,58 +777,61 @@ function PricingPanel({ token }: { token: string }) {
     }
   };
 
-  if (!config) return null;
+  const priceNum = parseInt(price) || 0;
+  const origNum = parseInt(originalPrice) || 0;
+  const discPct = origNum > priceNum ? Math.round((origNum - priceNum) / origNum * 100) : 0;
 
   return (
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 mb-6">
       <div className="flex items-center justify-between mb-5">
-        <h2 className="font-bold text-gray-900 flex items-center gap-2 text-base">
-          💰 Pricing Settings
-        </h2>
-        <span className="text-xs text-gray-400 bg-gray-50 px-2 py-1 rounded-lg">
-          Active: ₹{config.active_price_inr.toLocaleString("en-IN")}
-          {config.discount_pct > 0 && ` (${config.discount_pct}% off)`}
-        </span>
+        <h2 className="font-bold text-gray-900 flex items-center gap-2 text-base">💰 Pricing Settings</h2>
+        {config && (
+          <span className="text-xs text-green-700 bg-green-50 px-2 py-1 rounded-lg font-semibold">
+            Live: ₹{config.active_price_inr.toLocaleString("en-IN")}
+            {config.discount_pct > 0 && ` — ${config.discount_pct}% OFF`}
+          </span>
+        )}
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
-        {config.prices.map(p => {
-          const isActive = config.active_price_inr === p.inr;
-          const discPct = Math.round((config.max_price_inr - p.inr) / config.max_price_inr * 100);
-          return (
-            <button
-              key={p.inr}
-              type="button"
-              onClick={() => setSelected(p.inr)}
-              className={`relative text-left p-4 rounded-xl border-2 transition-all ${
-                selected === p.inr
-                  ? "border-green-500 bg-green-50"
-                  : "border-gray-200 hover:border-green-300 hover:bg-gray-50"
-              }`}
-            >
-              {isActive && (
-                <span className="absolute top-2 right-2 text-xs bg-green-600 text-white px-1.5 py-0.5 rounded-full font-semibold">
-                  Active
-                </span>
-              )}
-              <div className="font-bold text-gray-900 text-lg">₹{p.inr.toLocaleString("en-IN")}</div>
-              <div className="text-xs text-gray-500 font-medium mb-2">{p.label}</div>
-              {discPct > 0 && (
-                <div className="text-xs text-orange-600 font-semibold mb-2">{discPct}% OFF max price</div>
-              )}
-              <div className="text-xs text-gray-400 space-y-0.5">
-                <div>${p.usd} · €{p.eur} · £{p.gbp}</div>
-                <div>AED {p.aed} · SGD {p.sgd}</div>
-              </div>
-            </button>
-          );
-        })}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+        <div>
+          <label className="block text-sm font-semibold text-gray-700 mb-1">
+            Charge Amount (₹) <span className="text-red-500">*</span>
+          </label>
+          <input
+            type="number" min="10" max="99999"
+            value={price}
+            onChange={e => setPrice(e.target.value)}
+            className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-green-500 focus:ring-2 focus:ring-green-100 outline-none text-gray-800 text-lg font-bold"
+            placeholder="e.g. 1999"
+          />
+          <p className="text-xs text-gray-400 mt-1">This is the actual amount clients pay</p>
+        </div>
+        <div>
+          <label className="block text-sm font-semibold text-gray-700 mb-1">
+            Original Price (₹) — shown as strikethrough
+          </label>
+          <input
+            type="number" min="0" max="99999"
+            value={originalPrice}
+            onChange={e => setOriginalPrice(e.target.value)}
+            className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-green-500 focus:ring-2 focus:ring-green-100 outline-none text-gray-800 text-lg font-bold"
+            placeholder="e.g. 2999 (leave 0 for no offer)"
+          />
+          <p className="text-xs text-gray-400 mt-1">Set higher than charge amount to show discount</p>
+        </div>
       </div>
+
+      {discPct > 0 && (
+        <div className="bg-orange-50 border border-orange-200 rounded-xl p-3 mb-4 text-sm text-orange-700 font-semibold">
+          Preview: Client sees ~~₹{origNum.toLocaleString("en-IN")}~~ → ₹{priceNum.toLocaleString("en-IN")} ({discPct}% OFF)
+        </div>
+      )}
 
       <button
         onClick={handleSave}
-        disabled={saving || selected === config.active_price_inr}
-        className="bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold px-5 py-2.5 rounded-xl text-sm transition-all flex items-center gap-2"
+        disabled={saving}
+        className="bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white font-semibold px-5 py-2.5 rounded-xl text-sm transition-all flex items-center gap-2"
       >
         {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
         {saving ? "Saving..." : "Save Price"}

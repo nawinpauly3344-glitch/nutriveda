@@ -771,7 +771,7 @@ function PaymentWall({
 }) {
   const [paying, setPaying] = useState(false);
   const price = priceConfig?.active_price_inr ?? 1999;
-  const maxPrice = priceConfig?.max_price_inr ?? 2999;
+  const originalPrice = priceConfig?.original_price_inr ?? 0;
   const discountPct = priceConfig?.discount_pct ?? 0;
 
   const handlePay = async () => {
@@ -818,9 +818,9 @@ function PaymentWall({
             </div>
           )}
           <div className="text-sm font-medium opacity-80 mb-1">Personalized Diet &amp; Fitness Plan</div>
-          {discountPct > 0 && (
+          {discountPct > 0 && originalPrice > 0 && (
             <div className="text-lg line-through opacity-60 mb-1">
-              ₹{maxPrice.toLocaleString("en-IN")}
+              ₹{originalPrice.toLocaleString("en-IN")}
             </div>
           )}
           <div className="text-5xl font-bold mb-1">₹{price.toLocaleString("en-IN")}</div>

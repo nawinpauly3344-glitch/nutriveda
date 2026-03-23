@@ -35,11 +35,13 @@ async def get_payment_config(db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(AppSettings).where(AppSettings.key == "active_price_inr"))
     setting = result.scalar_one_or_none()
     price_inr = int(setting.value) if setting else 1999
-    max_price = 2999
-    discount_pct = round((max_price - price_inr) / max_price * 100) if price_inr < max_price else 0
+    orig_result = await db.execute(select(AppSettings).where(AppSettings.key == "original_price_inr"))
+    orig_setting = orig_result.scalar_one_or_none()
+    original_price = int(orig_setting.value) if orig_setting else 0
+    discount_pct = round((original_price - price_inr) / original_price * 100) if original_price > price_inr > 0 else 0
     return {
         "active_price_inr": price_inr,
-        "max_price_inr": max_price,
+        "original_price_inr": original_price,
         "discount_pct": discount_pct,
         "razorpay_key_id": RAZORPAY_KEY_ID,
         "payment_enabled": bool(RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET),
