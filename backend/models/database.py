@@ -26,7 +26,12 @@ DATABASE_URL = _raw_url
 _is_postgres = DATABASE_URL.startswith("postgresql")
 _engine_kwargs: dict = {"echo": False}
 if _is_postgres:
-    _engine_kwargs["connect_args"] = {"ssl": "require"}
+    # Use SSL only for external hosts (not Render internal network)
+    _host = DATABASE_URL.split("@")[-1].split("/")[0]
+    if "." in _host and "render.com" in _host:
+        _engine_kwargs["connect_args"] = {"ssl": "require"}
+    else:
+        _engine_kwargs["connect_args"] = {"ssl": False}
 
 engine = create_async_engine(DATABASE_URL, **_engine_kwargs)
 AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
