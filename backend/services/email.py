@@ -24,6 +24,7 @@ def send_diet_plan_email(
     client_name: str,
     pdf_path: str,
     nutritionist_notes: str = "",
+    plan_text: str = "",
 ) -> bool:
     """
     Send the approved diet plan PDF to the client via Gmail.
@@ -111,9 +112,29 @@ def send_diet_plan_email(
 </html>
 """
 
-        msg.attach(MIMEText(html_body, "html"))
+        # Embed plan text in email body if available
+        plan_html = ""
+        if plan_text:
+            import re as _re
+            # Convert markdown to simple HTML for email
+            safe_plan = plan_text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+            # Headers
+            safe_plan = _re.sub(r'^### (.+)$', r'<h4 style="color:#16a34a;margin:12px 0 4px">\1</h4>', safe_plan, flags=_re.MULTILINE)
+            safe_plan = _re.sub(r'^## (.+)$', r'<h3 style="color:#065f46;background:#ecfdf5;padding:8px;border-radius:4px;margin:16px 0 4px">\1</h3>', safe_plan, flags=_re.MULTILINE)
+            safe_plan = _re.sub(r'^# (.+)$', r'<h2 style="color:#065f46;margin:0 0 8px">\1</h2>', safe_plan, flags=_re.MULTILINE)
+            # Bold
+            safe_plan = _re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', safe_plan)
+            # Tables → preserve as preformatted
+            safe_plan = safe_plan.replace("\n", "<br>")
+            plan_html = f"""
+            <div style="margin:24px 0;padding:20px;background:#f9fafb;border-radius:8px;font-size:13px;line-height:1.8;font-family:monospace;white-space:pre-wrap;overflow-x:auto;">
+                {safe_plan}
+            </div>
+            """
 
-        # Attach PDF
+        msg.attach(MIMEText(html_body + plan_html, "html"))
+
+        # Attach PDF if available
         pdf_file = Path(pdf_path)
         if pdf_file.exists():
             with open(pdf_file, "rb") as f:
@@ -126,8 +147,7 @@ def send_diet_plan_email(
                 msg.attach(pdf_attachment)
             log.info(f"PDF attached: {pdf_file.name}")
         else:
-            log.error(f"PDF not found at {pdf_path}, aborting email send")
-            return False
+            log.info(f"No PDF available — sending plan as email body only")
 
         # Send via Gmail SMTP
         with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=15) as server:

@@ -271,11 +271,13 @@ async def send_plan_email(
         raise HTTPException(status_code=400, detail="Client email not available")
 
     pdf_path = plan.pdf_path or ""
+    plan_text = plan.final_plan or plan.generated_plan or ""
     success = send_diet_plan_email(
         to_email=sub.email,
         client_name=sub.full_name,
         pdf_path=pdf_path,
         nutritionist_notes=plan.admin_notes or "",
+        plan_text=plan_text,
     )
 
     if success:
