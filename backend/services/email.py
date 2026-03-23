@@ -159,7 +159,7 @@ def send_diet_plan_email(
 
     except smtplib.SMTPAuthenticationError as e:
         log.error(f"Gmail authentication failed: {e}")
-        return False
+        raise RuntimeError(f"SMTPAuthenticationError: {e}")
     except Exception as e:
         log.error(f"Failed to send email: {type(e).__name__}: {e}")
-        return False
+        raise RuntimeError(f"{type(e).__name__}: {e}")
