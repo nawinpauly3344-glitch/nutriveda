@@ -287,7 +287,7 @@ async def send_plan_email(
         await db.commit()
         return {"success": True, "message": f"Email sent to {sub.email}"}
     else:
-        raise HTTPException(status_code=500, detail="Failed to send email. Check Gmail App Password in .env")
+        raise HTTPException(status_code=500, detail=f"Failed to send email. pdf_path='{pdf_path}' plan_text_len={len(plan_text)}")
 
 
 @router.get("/plans/{plan_id}/pdf-download")

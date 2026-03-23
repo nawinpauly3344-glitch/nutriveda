@@ -157,9 +157,9 @@ def send_diet_plan_email(
         log.info(f"Email sent successfully to {to_email}")
         return True
 
-    except smtplib.SMTPAuthenticationError:
-        log.error("Gmail authentication failed. Check your App Password in .env")
+    except smtplib.SMTPAuthenticationError as e:
+        log.error(f"Gmail authentication failed: {e}")
         return False
     except Exception as e:
-        log.error(f"Failed to send email: {e}")
+        log.error(f"Failed to send email: {type(e).__name__}: {e}")
         return False
