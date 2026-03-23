@@ -26,12 +26,17 @@ DATABASE_URL = _raw_url
 _is_postgres = DATABASE_URL.startswith("postgresql")
 _engine_kwargs: dict = {"echo": False}
 if _is_postgres:
-    # Use SSL only for external hosts (not Render internal network)
-    _host = DATABASE_URL.split("@")[-1].split("/")[0]
-    if "." in _host and "render.com" in _host:
-        _engine_kwargs["connect_args"] = {"ssl": "require"}
-    else:
-        _engine_kwargs["connect_args"] = {"ssl": False}
+    # Determine SSL based on host:
+    # - Render internal URL (dpg-xxx, no dots): no SSL
+    # - Render external URL (*.singapore-postgres.render.com): SSL, skip cert verify
+    _host = DATABASE_URL.split("@")[-1].split("/")[0].split(":")[0]
+    if "render.com" in _host:
+        import ssl as _ssl_module
+        _ssl_ctx = _ssl_module.create_default_context()
+        _ssl_ctx.check_hostname = False
+        _ssl_ctx.verify_mode = _ssl_module.CERT_NONE
+        _engine_kwargs["connect_args"] = {"ssl": _ssl_ctx}
+    # For internal Render URL: no connect_args needed (no SSL on internal network)
 
 engine = create_async_engine(DATABASE_URL, **_engine_kwargs)
 AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
