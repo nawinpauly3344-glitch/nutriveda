@@ -3,7 +3,7 @@
 import os
 import logging
 import asyncio
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Body
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -202,7 +202,7 @@ async def update_plan(
     if update.status is not None:
         plan.status = PlanStatus(update.status.value)
 
-    plan.updated_at = datetime.now(timezone.utc)
+    plan.updated_at = datetime.utcnow()
     await db.commit()
 
     return {"success": True, "plan_id": plan_id, "status": plan.status.value}
@@ -222,7 +222,7 @@ async def approve_plan(
         raise HTTPException(status_code=404, detail="Plan not found")
 
     plan.status = PlanStatus.APPROVED
-    plan.updated_at = datetime.now(timezone.utc)
+    plan.updated_at = datetime.utcnow()
     await db.commit()
 
     # Get client info for PDF
@@ -285,7 +285,7 @@ async def send_plan_email(
 
     if success:
         plan.status = PlanStatus.SENT
-        plan.email_sent_at = datetime.now(timezone.utc)
+        plan.email_sent_at = datetime.utcnow()
         plan.email_sent_to = sub.email
         await db.commit()
         return {"success": True, "message": f"Email sent to {sub.email}"}
@@ -484,7 +484,7 @@ async def regenerate_plan(
         history.append({
             "revision":     new_count,
             "instructions": current_msgs,
-            "timestamp":    datetime.now(timezone.utc).isoformat(),
+            "timestamp":    datetime.utcnow().isoformat(),
         })
         plan.admin_chat_history = history
 
@@ -498,7 +498,7 @@ async def regenerate_plan(
         f"Applying revision #{new_count} with {len(current_msgs)} new instruction(s)..."
         if current_msgs else f"Regenerating (revision #{new_count})..."
     )
-    plan.updated_at = datetime.now(timezone.utc)
+    plan.updated_at = datetime.utcnow()
     await db.commit()
 
     background_tasks.add_task(
@@ -677,7 +677,7 @@ async def _generate_pdf_background(
                     plan.pdf_path = pdf_path
                 if word_path:
                     plan.word_path = word_path
-                plan.updated_at = datetime.now(timezone.utc)
+                plan.updated_at = datetime.utcnow()
                 await db.commit()
                 log.info(f"PDF + Word saved for plan #{plan_id}")
     except Exception as e:
@@ -713,7 +713,7 @@ async def _regenerate_plan_background(plan_id: int, client_data: dict, targets, 
                 plan.admin_notes = None  # Clear old error notes
                 plan.generation_progress = 100
                 plan.generation_stage = "Plan ready for review!"
-                plan.updated_at = datetime.now(timezone.utc)
+                plan.updated_at = datetime.utcnow()
                 await db.commit()
                 log.info(f"Plan #{plan_id} regenerated successfully")
     except Exception as e:
@@ -725,7 +725,7 @@ async def _regenerate_plan_background(plan_id: int, client_data: dict, targets, 
                 if plan:
                     plan.status = PlanStatus.FAILED
                     plan.admin_notes = f"Regeneration failed: {str(e)[:500]}"
-                    plan.updated_at = datetime.now(timezone.utc)
+                    plan.updated_at = datetime.utcnow()
                     await db.commit()
         except Exception as db_err:
             log.error(f"Could not mark plan as FAILED: {db_err}")

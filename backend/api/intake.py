@@ -5,7 +5,7 @@ import asyncio
 from fastapi import APIRouter, Depends, BackgroundTasks, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from datetime import datetime, timezone
+from datetime import datetime
 
 from models.database import get_db, ClientSubmission, DietPlan, PlanStatus
 from models.schemas import FullIntakeForm, SubmissionResponse
@@ -206,7 +206,7 @@ async def _generate_plan_background(
                 plan.status = PlanStatus.PENDING  # Ready for admin review
                 plan.generation_progress = 100
                 plan.generation_stage = "Plan ready for review!"
-                plan.updated_at = datetime.now(timezone.utc)
+                plan.updated_at = datetime.utcnow()
                 await db.commit()
                 log.info(f"Plan #{plan_id} generated successfully ({len(plan_text)} chars)")
 
@@ -221,7 +221,7 @@ async def _generate_plan_background(
                 if plan:
                     plan.status = PlanStatus.FAILED
                     plan.admin_notes = f"Auto-generation failed: {str(e)[:500]}"
-                    plan.updated_at = datetime.now(timezone.utc)
+                    plan.updated_at = datetime.utcnow()
                     await db.commit()
         except Exception as db_err:
             log.error(f"Could not update plan status to FAILED: {db_err}")
