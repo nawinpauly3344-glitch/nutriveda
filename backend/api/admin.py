@@ -280,8 +280,8 @@ async def send_plan_email(
             nutritionist_notes=plan.admin_notes or "",
             plan_text=plan_text,
         )
-    except RuntimeError as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Email failed: {e}")
 
     if success:
         plan.status = PlanStatus.SENT
@@ -290,7 +290,7 @@ async def send_plan_email(
         await db.commit()
         return {"success": True, "message": f"Email sent to {sub.email}"}
     else:
-        raise HTTPException(status_code=500, detail="Failed to send email — check logs")
+        raise HTTPException(status_code=500, detail="Failed to send email")
 
 
 @router.get("/plans/{plan_id}/pdf-download")
