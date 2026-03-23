@@ -18,3 +18,4 @@ python-dotenv>=1.0.1
 tiktoken>=0.8.0
 numpy>=1.26.0
 razorpay>=1.4.2
+asyncpg>=0.29.0

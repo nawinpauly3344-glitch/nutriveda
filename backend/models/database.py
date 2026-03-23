@@ -13,9 +13,22 @@ from dotenv import load_dotenv
 
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "../../.env"))
 
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./nutrition.db")
+_raw_url = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./nutrition.db")
 
-engine = create_async_engine(DATABASE_URL, echo=False)
+# Convert Supabase/Heroku postgres:// → postgresql+asyncpg://
+if _raw_url.startswith("postgres://"):
+    _raw_url = _raw_url.replace("postgres://", "postgresql+asyncpg://", 1)
+elif _raw_url.startswith("postgresql://") and "asyncpg" not in _raw_url:
+    _raw_url = _raw_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+
+DATABASE_URL = _raw_url
+
+_is_postgres = DATABASE_URL.startswith("postgresql")
+_engine_kwargs: dict = {"echo": False}
+if _is_postgres:
+    _engine_kwargs["connect_args"] = {"ssl": "require"}
+
+engine = create_async_engine(DATABASE_URL, **_engine_kwargs)
 AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 
@@ -158,19 +171,34 @@ async def init_db():
     import sqlalchemy as sa
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-        # Migrations — safe to run repeatedly (errors = column already exists)
-        for sql in [
-            "ALTER TABLE client_submissions ADD COLUMN exercise_preference JSON DEFAULT '[]'",
-            "ALTER TABLE diet_plans ADD COLUMN generation_progress INTEGER DEFAULT 0",
-            "ALTER TABLE diet_plans ADD COLUMN generation_stage TEXT",
-            "ALTER TABLE diet_plans ADD COLUMN word_path TEXT",
-            "ALTER TABLE diet_plans ADD COLUMN rag_chunks JSON",
-            "ALTER TABLE client_submissions ADD COLUMN protein_intake_level TEXT",
-            "ALTER TABLE diet_plans ADD COLUMN regeneration_count INTEGER DEFAULT 0",
-            "ALTER TABLE diet_plans ADD COLUMN admin_chat_history JSON DEFAULT '[]'",
-            "ALTER TABLE client_submissions ADD COLUMN payment_id TEXT",
-            "ALTER TABLE client_submissions ADD COLUMN payment_status TEXT DEFAULT 'unpaid'",
-        ]:
+        # Migrations — safe to run repeatedly
+        if _is_postgres:
+            migrations = [
+                "ALTER TABLE client_submissions ADD COLUMN IF NOT EXISTS exercise_preference JSON DEFAULT '[]'",
+                "ALTER TABLE diet_plans ADD COLUMN IF NOT EXISTS generation_progress INTEGER DEFAULT 0",
+                "ALTER TABLE diet_plans ADD COLUMN IF NOT EXISTS generation_stage TEXT",
+                "ALTER TABLE diet_plans ADD COLUMN IF NOT EXISTS word_path TEXT",
+                "ALTER TABLE diet_plans ADD COLUMN IF NOT EXISTS rag_chunks JSON",
+                "ALTER TABLE client_submissions ADD COLUMN IF NOT EXISTS protein_intake_level TEXT",
+                "ALTER TABLE diet_plans ADD COLUMN IF NOT EXISTS regeneration_count INTEGER DEFAULT 0",
+                "ALTER TABLE diet_plans ADD COLUMN IF NOT EXISTS admin_chat_history JSON DEFAULT '[]'",
+                "ALTER TABLE client_submissions ADD COLUMN IF NOT EXISTS payment_id TEXT",
+                "ALTER TABLE client_submissions ADD COLUMN IF NOT EXISTS payment_status TEXT DEFAULT 'unpaid'",
+            ]
+        else:
+            migrations = [
+                "ALTER TABLE client_submissions ADD COLUMN exercise_preference JSON DEFAULT '[]'",
+                "ALTER TABLE diet_plans ADD COLUMN generation_progress INTEGER DEFAULT 0",
+                "ALTER TABLE diet_plans ADD COLUMN generation_stage TEXT",
+                "ALTER TABLE diet_plans ADD COLUMN word_path TEXT",
+                "ALTER TABLE diet_plans ADD COLUMN rag_chunks JSON",
+                "ALTER TABLE client_submissions ADD COLUMN protein_intake_level TEXT",
+                "ALTER TABLE diet_plans ADD COLUMN regeneration_count INTEGER DEFAULT 0",
+                "ALTER TABLE diet_plans ADD COLUMN admin_chat_history JSON DEFAULT '[]'",
+                "ALTER TABLE client_submissions ADD COLUMN payment_id TEXT",
+                "ALTER TABLE client_submissions ADD COLUMN payment_status TEXT DEFAULT 'unpaid'",
+            ]
+        for sql in migrations:
             try:
                 await conn.execute(sa.text(sql))
             except Exception:
