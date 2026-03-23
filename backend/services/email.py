@@ -135,8 +135,8 @@ def send_diet_plan_email(
         msg.attach(MIMEText(html_body + plan_html, "html"))
 
         # Attach PDF if available
-        pdf_file = Path(pdf_path)
-        if pdf_file.exists():
+        pdf_file = Path(pdf_path) if pdf_path else None
+        if pdf_file and pdf_file.exists():
             with open(pdf_file, "rb") as f:
                 pdf_attachment = MIMEApplication(f.read(), _subtype="pdf")
                 pdf_attachment.add_header(
@@ -147,7 +147,7 @@ def send_diet_plan_email(
                 msg.attach(pdf_attachment)
             log.info(f"PDF attached: {pdf_file.name}")
         else:
-            log.info(f"No PDF available — sending plan as email body only")
+            log.info("No PDF available — sending plan as email body only")
 
         # Send via Gmail SMTP
         with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=15) as server:
