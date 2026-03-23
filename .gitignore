@@ -1,0 +1,45 @@
+# Environment
+.env
+.env.local
+.env.production
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+venv/
+.venv/
+env/
+
+# Database (local only — Render uses persistent disk)
+backend/nutrition.db
+
+# Generated files (recreated at runtime)
+backend/pdf_plans/*.pdf
+backend/word_plans/*.docx
+
+# Node
+frontend/node_modules/
+frontend/.next/
+frontend/.vercel/
+frontend/tsconfig.tsbuildinfo
+
+# Old VPS deploy scripts
+deploy_*.py
+fix_vps_env.py
+check_*.py
+test_*.py
+
+# Old ChromaDB
+chroma_db/
+
+# Misc
+Password.txt
+*.log
+.DS_Store
+Thumbs.db
