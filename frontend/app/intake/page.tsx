@@ -778,14 +778,72 @@ function PaymentWall({
     setPaying(true);
     try {
       if (!priceConfig?.payment_enabled) {
-        // Payment not configured yet — submit directly
         onPaymentSuccess(undefined);
         return;
       }
-      // Razorpay flow — will be fully wired when keys are available
-      onPaymentSuccess(undefined);
-    } catch {
-      toast.error("Payment failed. Please try again.");
+
+      // Step 1: Create Razorpay order on backend
+      const orderRes = await fetch("/api/payment/create-order", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ submission_id: 0 }),
+      });
+      if (!orderRes.ok) throw new Error("Failed to create order");
+      const order = await orderRes.json();
+
+      // Step 2: Open Razorpay checkout
+      await new Promise<void>((resolve, reject) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const Razorpay = (window as any).Razorpay;
+        if (!Razorpay) { reject(new Error("Razorpay not loaded")); return; }
+
+        const rzp = new Razorpay({
+          key: order.key_id,
+          amount: order.amount,
+          currency: order.currency,
+          order_id: order.order_id,
+          name: "NutriVeda",
+          description: "Personalized Diet & Fitness Plan",
+          image: "/logo.png",
+          prefill: {
+            name: form.full_name,
+            email: form.email,
+            contact: form.phone,
+          },
+          theme: { color: "#16a34a" },
+          handler: async (response: { razorpay_payment_id: string; razorpay_order_id: string; razorpay_signature: string }) => {
+            try {
+              // Step 3: Verify payment on backend
+              const verifyRes = await fetch("/api/payment/verify", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  razorpay_payment_id: response.razorpay_payment_id,
+                  razorpay_order_id: response.razorpay_order_id,
+                  razorpay_signature: response.razorpay_signature,
+                  submission_id: 0,
+                }),
+              });
+              if (!verifyRes.ok) throw new Error("Payment verification failed");
+              resolve();
+              onPaymentSuccess(response.razorpay_payment_id);
+            } catch (e) {
+              reject(e);
+            }
+          },
+          modal: {
+            ondismiss: () => {
+              reject(new Error("Payment cancelled"));
+            },
+          },
+        });
+        rzp.open();
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Payment failed";
+      if (msg !== "Payment cancelled") {
+        toast.error("Payment failed. Please try again.");
+      }
       setPaying(false);
     }
   };
