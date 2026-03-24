@@ -40,6 +40,8 @@ async def submit_intake_form(
         activity_level=s3.activity_level.value,
         goal=s1.goal.value,
         target_weight_kg=s1.target_weight_kg,
+        is_breastfeeding=s2.is_breastfeeding,
+        is_pregnant=s2.is_pregnant,
     )
 
     # Build flat client dict for generator

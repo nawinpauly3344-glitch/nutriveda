@@ -469,6 +469,8 @@ async def regenerate_plan(
         activity_level=sub.activity_level,
         goal=sub.goal,
         target_weight_kg=sub.target_weight_kg,
+        is_breastfeeding=bool(sub.is_breastfeeding),
+        is_pregnant=bool(sub.is_pregnant),
     )
 
     client_data = {c.key: getattr(sub, c.key) for c in sub.__table__.columns}

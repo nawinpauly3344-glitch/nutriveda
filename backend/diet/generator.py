@@ -414,12 +414,16 @@ def _select_foods_for_client(client_data: dict) -> dict:
 
     # ── Apply allergy filter ──────────────────────────────────────────────────
     allergy_map = {
-        "dairy": ["milk", "paneer", "curd", "yogurt", "ghee", "butter", "cheese", "lassi", "buttermilk", "whey"],
-        "gluten": ["bread", "roti", "wheat", "atta", "pasta", "upma", "semolina", "suji"],
-        "nuts": ["almonds", "cashews", "walnuts", "peanuts", "mixed nuts"],
+        "dairy": ["milk", "paneer", "curd", "yogurt", "ghee", "butter", "cheese", "lassi", "buttermilk", "whey", "cream", "khoa", "mawa", "rabri"],
+        "gluten": ["bread", "roti", "wheat", "atta", "pasta", "upma", "semolina", "suji", "maida", "paratha", "puri", "chapati", "barley", "seitan"],
+        "nuts": ["almonds", "cashews", "walnuts", "peanuts", "mixed nuts", "almond milk", "peanut butter", "groundnut", "groundnut oil", "peanut oil", "nut butter", "cashew butter", "walnut", "pistachio", "hazelnut", "pecan", "macadamia"],
+        "tree_nuts": ["almonds", "cashews", "walnuts", "mixed nuts", "almond milk", "cashew butter", "walnut", "pistachio", "hazelnut", "pecan", "macadamia"],
+        "peanut": ["peanuts", "peanut butter", "groundnut", "groundnut oil", "peanut oil"],
         "egg": ["egg"],
-        "fish": ["fish", "salmon", "tuna", "prawn", "shrimp"],
-        "soy": ["tofu", "soy"],
+        "fish": ["fish", "salmon", "tuna", "prawn", "shrimp", "crab", "lobster", "squid", "mackerel", "sardine", "anchovy", "hilsa", "rohu", "catla"],
+        "shellfish": ["prawn", "shrimp", "crab", "lobster", "squid"],
+        "soy": ["tofu", "soy", "soya", "edamame", "soy milk", "tempeh", "miso"],
+        "sesame": ["sesame", "til", "tahini", "sesame oil"],
     }
     for allergy in allergies:
         for allergen_key, blocked_words in allergy_map.items():
@@ -1859,6 +1863,94 @@ async def generate_diet_plan(
     if work_type == "physical labor":
         special_notes.append("PHYSICAL LABOR job: calorie needs may be higher on workdays. Pre-shift meal should be carb-rich for sustained energy.")
 
+    # ── Condition-specific clinical guidance ──────────────────────────────────
+    cond_lower = [c.lower() for c in conditions]
+    for cond in cond_lower:
+        if "pcos" in cond or "polycystic" in cond:
+            special_notes.append(
+                "PCOS: The plan MUST explicitly mention PCOS in the header. "
+                "Use low-glycaemic foods (brown rice, oats, dalia, millets, legumes). "
+                "Reduce refined carbs (maida, white rice, sugar). Include anti-inflammatory foods: turmeric, berries, flaxseed. "
+                "Inositol-rich: buckwheat, legumes. Zinc: pumpkin seeds, sesame. Chromium: broccoli, green beans. "
+                "Include a dedicated 'PCOS Management Tips' section in Daily Habits."
+            )
+        if "hypothyroid" in cond or "thyroid" in cond:
+            special_notes.append(
+                "HYPOTHYROIDISM: The plan MUST explicitly mention Hypothyroidism in the header. "
+                "Include iodine-rich foods (iodised salt, seafood if non-allergic). "
+                "Selenium: Brazil nuts (1–2/day), sunflower seeds. Zinc: pumpkin seeds, chickpeas. "
+                "Cook cruciferous vegetables (cauliflower, cabbage, broccoli) — raw goitrogenic foods reduce thyroid function. "
+                "Avoid soy in excess (if on levothyroxine — gap of 4 hours from medication). "
+                "Include a dedicated 'Thyroid Health Tips' section in Daily Habits."
+            )
+        if "diabetes" in cond or "diabetic" in cond or "type 2" in cond or "type 1" in cond:
+            special_notes.append(
+                "DIABETES: The plan MUST explicitly mention Diabetes in the header. "
+                "Use low-GI foods throughout: brown rice, dalia, oats, whole wheat, legumes. "
+                "Strictly avoid: refined sugar, white rice, maida, packaged juices, sweets (mithai), fruit juices. "
+                "Distribute carbs evenly across all meals — no large carb-heavy meals. "
+                "Include cinnamon, methi seeds, karela (bitter gourd), jamun. "
+                "Portion sizes MUST be written precisely. "
+                "Include a dedicated 'Diabetes Management Tips' section in Daily Habits."
+            )
+        if "hypertension" in cond or "blood pressure" in cond or "high bp" in cond:
+            special_notes.append(
+                "HYPERTENSION: The plan MUST explicitly mention Hypertension in the header. "
+                "DASH diet principles: reduce sodium — avoid added salt, pickles, papad, processed foods. "
+                "Increase potassium: banana, coconut water, sweet potato, spinach, tomatoes. "
+                "Magnesium: leafy greens, pumpkin seeds. Calcium: dairy or fortified alternatives. "
+                "Avoid: excessive caffeine, alcohol, fried snacks. "
+                "Include a dedicated 'Blood Pressure Management Tips' section in Daily Habits."
+            )
+        if "cholesterol" in cond or "dyslipidemia" in cond or "lipid" in cond:
+            special_notes.append(
+                "HIGH CHOLESTEROL / DYSLIPIDEMIA: The plan MUST explicitly mention this in the header. "
+                "Include soluble fibre: oats, rajma, chana, methi, isabgol. "
+                "Healthy fats: olive oil, flaxseed, walnuts (if no nut allergy), fatty fish. "
+                "Strictly avoid: ghee excess, fried foods, full-fat dairy, red meat, trans fats (vanaspati, dalda). "
+                "Include omega-3 sources. Include a dedicated 'Heart Health Tips' section."
+            )
+        if "uric acid" in cond or "gout" in cond:
+            special_notes.append(
+                "HIGH URIC ACID / GOUT: The plan MUST explicitly mention this in the header. "
+                "Avoid high-purine foods: red meat, organ meats (liver, kidney), shellfish, beer, yeast extracts, spinach excess, mushrooms excess. "
+                "Include: cherries, low-fat dairy, vitamin C rich foods (amla, guava, lemon water). "
+                "High water intake (3+ litres/day). Avoid fructose-rich foods and sugary drinks. "
+                "Include a dedicated 'Uric Acid Management Tips' section."
+            )
+        if "fatty liver" in cond or "nafld" in cond or "liver" in cond:
+            special_notes.append(
+                "FATTY LIVER / NAFLD: The plan MUST explicitly mention this in the header. "
+                "Strictly avoid: alcohol, fried foods, excess sugar, refined carbs, processed foods. "
+                "Include: leafy greens, cruciferous vegetables, berries, garlic, turmeric, green tea. "
+                "Coffee (2 cups/day plain) is beneficial for liver health. "
+                "Calorie deficit is therapeutic — ensure client stays in deficit. "
+                "Include a dedicated 'Liver Health Tips' section."
+            )
+        if "anemia" in cond or "anaemia" in cond or "low hemoglobin" in cond or "low haemoglobin" in cond:
+            special_notes.append(
+                "ANEMIA (LOW HAEMOGLOBIN): The plan MUST explicitly mention Anemia in the header. "
+                "Include haem iron: chicken, fish, lean meat. Non-haem iron: spinach, methi, rajma, chana, tofu, jaggery, dates, ragi. "
+                "Always pair iron-rich foods with vitamin C (lemon juice, amla, guava) for absorption. "
+                "Avoid tea/coffee immediately after meals — reduces iron absorption by 60%. "
+                "Include folate: leafy greens, lentils. B12: dairy, eggs, meat. "
+                "Include a dedicated 'Anemia Recovery Tips' section."
+            )
+        if "kidney" in cond or "renal" in cond or "ckd" in cond:
+            special_notes.append(
+                "KIDNEY DISEASE / CKD: The plan MUST explicitly mention Kidney condition in the header. "
+                "Limit potassium-rich foods if high potassium (avoid banana, potato, tomato in excess). "
+                "Limit phosphorus: reduce dairy, processed foods, cola drinks, nuts in excess. "
+                "Low sodium: no added salt, no pickles. "
+                "Protein needs may be LOWER than standard — consult nephrology guidelines. "
+                "Include a dedicated 'Kidney Health Tips' section."
+            )
+        if "pcod" in cond:
+            special_notes.append(
+                "PCOD: Same as PCOS — use low-GI foods, reduce refined carbs, include zinc and chromium-rich foods. "
+                "Include a dedicated 'PCOD Management Tips' section in Daily Habits."
+            )
+
     special_block = ""
     if special_notes:
         special_block = "SPECIAL CLINICAL NOTES — MUST APPLY TO THIS PLAN:\n" + "\n".join(f"• {n}" for n in special_notes) + "\n"
@@ -1967,6 +2059,8 @@ State: (1) data source = "USDA FoodData Central + Indian IFCT", (2) grain/dal we
 
 SECTION B — MEAL PLAN (Monday through Sunday)
 
+CRITICAL: You MUST include ALL 7 days — Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, AND Sunday. Do NOT stop before Sunday. If running long, keep each day's description brief but complete. Every day must have a Day Total row.
+
 IMPORTANT: Keep output concise. Do not write explanatory paragraphs between days.
 
 MANDATORY PROCESS — follow for EVERY day:
@@ -2032,7 +2126,18 @@ FOOD SELECTION:
 2. Adjust quantities to hit calorie targets — do not substitute familiar foods.
 3. Vary foods each day for the week.
 4. Diet type: {diet_type.replace('_',' ')} — {diet_note}
-5. Allergies to exclude: {allergy_str}. Conditions: {condition_str}
+5. ⚠️ STRICT ALLERGEN RULE — CLIENT HAS DECLARED ALLERGIES: {allergy_str}
+   DO NOT include ANY of these or their derivatives anywhere in the plan:
+   • dairy allergy → NO milk, paneer, curd, yogurt, ghee, butter, cheese, lassi, buttermilk, whey, cream, khoa
+   • gluten allergy → NO wheat, atta, maida, roti, paratha, bread, pasta, semolina/suji, upma, barley
+   • nut/tree nut allergy → NO almonds, cashews, walnuts, pistachios, almond milk, peanut butter, nut oils
+   • peanut allergy → NO peanuts, groundnuts, peanut butter, groundnut oil — even in cooking
+   • egg allergy → NO eggs in any form
+   • fish allergy → NO fish, tuna, salmon, mackerel, sardines, anchovies, hilsa, rohu
+   • shellfish allergy → NO prawns, shrimp, crab, lobster, squid
+   • soy allergy → NO tofu, soya, soy milk, edamame, tempeh
+   VIOLATION of allergen rules is a serious safety risk. Double-check every ingredient.
+6. Medical conditions (adapt plan accordingly): {condition_str}
 
 EXAMPLE STRUCTURE (Monday — replace with client's actual foods):
 ### MONDAY
@@ -2107,7 +2212,7 @@ Write a warm, personal 2–3 sentence message directly to {name} from their nutr
     log.info(f"Starting GPT-4o plan generation for {name}...")
 
     try:
-        plan = await _gpt_call(prompt, max_tokens=16000)
+        plan = await _gpt_call(prompt, max_tokens=16384)
         log.info(f"Plan generated — {len(plan)} characters | {len(sources)} knowledge base sources")
     except Exception as e:
         log.error(f"Plan generation failed for {name}: {e}")

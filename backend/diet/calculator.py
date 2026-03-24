@@ -59,6 +59,8 @@ def calculate_targets(
     activity_level: str,
     goal: str,
     target_weight_kg: Optional[float] = None,
+    is_breastfeeding: bool = False,
+    is_pregnant: bool = False,
 ) -> CalorieTargets:
     """Calculate all calorie and macro targets for a client."""
 
@@ -114,11 +116,31 @@ def calculate_targets(
         calorie_target = round(tdee + 200, 0)
         goal_adj = f"Performance surplus of {round(calorie_target - tdee)} kcal/day"
     elif goal in ("medical_management",):
-        calorie_target = tdee
-        goal_adj = "Maintenance calories (adjusted per medical condition)"
+        if target_weight_kg and target_weight_kg < weight_kg:
+            # Client wants to lose weight for medical reasons — apply safe deficit
+            gap = tdee - bmr
+            deficit = round(gap * 0.4, 0)
+            calorie_target = round(tdee - deficit, 0)
+            calorie_target = max(calorie_target, bmr)
+            actual_deficit = round(tdee - calorie_target)
+            goal_adj = (
+                f"Medical weight management — safe deficit of {actual_deficit} kcal/day "
+                f"(40% of TDEE-BMR gap). Adjusted per medical condition."
+            )
+        else:
+            calorie_target = tdee
+            goal_adj = "Maintenance calories (adjusted per medical condition)"
     else:
         calorie_target = tdee
         goal_adj = "Maintenance calories"
+
+    # Breastfeeding and pregnancy calorie additions (applied after goal calculation)
+    if is_breastfeeding:
+        calorie_target = round(calorie_target + 450, 0)
+        goal_adj += " | +450 kcal for breastfeeding"
+    elif is_pregnant:
+        calorie_target = round(calorie_target + 300, 0)
+        goal_adj += " | +300 kcal for pregnancy"
 
     # Macro split — protein starts at 1g/kg (body weight), scales with activity and goal
     # Base: sedentary = 1.0g/kg, scales up with activity level
@@ -131,10 +153,11 @@ def calculate_targets(
     }
     # Goal bonus — how much extra protein the goal demands
     _protein_goal_bonus = {
-        "lose_weight": 0.1,          # slightly higher to preserve muscle during deficit
-        "gain_muscle": 0.3,          # extra for muscle protein synthesis
+        "lose_weight": 0.3,          # higher protein preserves muscle during calorie deficit
+        "gain_muscle": 0.4,          # extra for muscle protein synthesis
         "gain_muscle_lose_fat": 0.3, # high protein drives fat loss + muscle retention simultaneously
-        "sports_nutrition": 0.3,     # athletic recovery and performance
+        "sports_nutrition": 0.4,     # athletic recovery and performance
+        "medical_management": 0.2,   # slightly higher protein for metabolic/hormonal conditions
     }
     base_g_per_kg = _protein_activity_base.get(activity_level, 1.0)
     bonus_g_per_kg = _protein_goal_bonus.get(goal, 0.0)
