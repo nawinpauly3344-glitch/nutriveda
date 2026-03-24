@@ -1001,12 +1001,17 @@ function IntakeContent() {
   const [submissionId, setSubmissionId] = useState<number>(0);
   const [priceConfig, setPriceConfig] = useState<PriceConfigData | null>(null);
 
-  // Fetch price config on mount
+  // Fetch price config on mount — retry up to 3 times (handles Render cold start)
   useEffect(() => {
-    fetch("/api/payment/config")
-      .then(r => r.json())
-      .then(setPriceConfig)
-      .catch(() => {});
+    let attempts = 0;
+    const tryFetch = () => {
+      attempts++;
+      fetch("/api/payment/config")
+        .then(r => { if (!r.ok) throw new Error("not ok"); return r.json(); })
+        .then(setPriceConfig)
+        .catch(() => { if (attempts < 3) setTimeout(tryFetch, 3000); });
+    };
+    tryFetch();
   }, []);
 
   // Pre-fill goal from URL param
@@ -1058,8 +1063,19 @@ function IntakeContent() {
       setStep(s => s + 1);
       return;
     }
-    // Step 5: submit form first, then show payment wall
-    if (!priceConfig?.payment_enabled) {
+    // Step 5: if priceConfig wasn't loaded yet (cold start), retry now
+    let config = priceConfig;
+    if (!config) {
+      try {
+        const r = await fetch("/api/payment/config");
+        if (r.ok) {
+          config = await r.json();
+          setPriceConfig(config);
+        }
+      } catch { /* ignore, fallthrough to no-payment path */ }
+    }
+    // Submit form first, then show payment wall
+    if (!config?.payment_enabled) {
       // No payment configured — submit directly
       handleSubmit();
       return;
@@ -1094,7 +1110,8 @@ function IntakeContent() {
         step4: {
           diet_type: form.diet_type, food_dislikes: form.food_dislikes || null,
           cuisine_preference: form.cuisine_preference, city: form.city || null,
-          state: form.state || null, cooking_situation: form.cooking_situation || null,
+          state: form.state || null, food_budget: form.food_budget || null,
+          cooking_situation: form.cooking_situation || null,
         },
         step5: {
           current_diet_description: form.current_diet_description || null,
