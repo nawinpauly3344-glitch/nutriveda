@@ -638,12 +638,19 @@ async def admin_chat(
     # Add the new message
     messages.append({"role": "user", "content": body.message})
 
-    # ── GPT-4o call ──────────────────────────────────────────────────────────
+    # ── OpenRouter call ──────────────────────────────────────────────────────
     try:
-        ai = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY", ""))
+        ai = AsyncOpenAI(
+            api_key=os.getenv("OPENROUTER_API_KEY", ""),
+            base_url="https://openrouter.ai/api/v1",
+            default_headers={
+                "HTTP-Referer": "https://nutriveda.vercel.app",
+                "X-Title": "NutriVeda",
+            },
+        )
         response = await asyncio.wait_for(
             ai.chat.completions.create(
-                model="gpt-4o",
+                model="openai/gpt-4o",
                 messages=messages,
                 max_tokens=800,
                 temperature=0.25,
