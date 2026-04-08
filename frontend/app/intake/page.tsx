@@ -1110,7 +1110,7 @@ function IntakeContent() {
         step4: {
           diet_type: form.diet_type, food_dislikes: form.food_dislikes || null,
           cuisine_preference: form.cuisine_preference, city: form.city || null,
-          state: form.state || null, food_budget: form.food_budget || null,
+          state: form.state || null,
           cooking_situation: form.cooking_situation || null,
         },
         step5: {
