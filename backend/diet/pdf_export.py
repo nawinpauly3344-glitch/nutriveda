@@ -8,6 +8,7 @@ Design principles:
   - Clean typography: Helvetica, consistent spacing
 """
 
+import io
 import os
 import re
 import logging
@@ -312,10 +313,12 @@ def generate_pdf(
 
     safe_name = re.sub(r"[^\w\s-]", "", client_name).replace(" ", "_")
     filename = f"diet_plan_{submission_id}_{plan_id}_{safe_name}.pdf"
-    output_path = PDF_DIR / filename
+
+    # Build PDF into memory buffer (uploaded to Sanity, not saved to disk)
+    pdf_buffer = io.BytesIO()
 
     doc = SimpleDocTemplate(
-        str(output_path),
+        pdf_buffer,
         pagesize=A4,
         rightMargin=2 * cm,
         leftMargin=2 * cm,
@@ -467,5 +470,17 @@ def generate_pdf(
     ))
 
     doc.build(story)
-    log.info(f"PDF generated: {output_path}")
-    return str(output_path)
+
+    # Upload to Sanity CDN
+    pdf_bytes = pdf_buffer.getvalue()
+    try:
+        from services.sanity_storage import upload_file
+        result = upload_file(pdf_bytes, filename, content_type="application/pdf")
+        log.info(f"PDF uploaded to Sanity: {filename} -> {result['url']}")
+        return result  # {"url": "...", "asset_id": "..."}
+    except Exception as e:
+        log.warning(f"Sanity upload failed, falling back to local: {e}")
+        output_path = PDF_DIR / filename
+        output_path.write_bytes(pdf_bytes)
+        log.info(f"PDF saved locally: {output_path}")
+        return str(output_path)

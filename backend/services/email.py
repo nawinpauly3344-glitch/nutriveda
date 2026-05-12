@@ -102,17 +102,28 @@ def send_diet_plan_email(
         "html": html,
     }
 
-    # Attach PDF if available
-    pdf_file = Path(pdf_path) if pdf_path else None
-    if pdf_file and pdf_file.exists():
+    # Attach PDF if available (supports Sanity CDN URLs and local file paths)
+    if pdf_path:
         try:
-            with open(pdf_file, "rb") as f:
-                pdf_b64 = base64.b64encode(f.read()).decode()
+            if pdf_path.startswith("http"):
+                # Fetch from Sanity CDN URL
+                pdf_resp = httpx.get(pdf_path, timeout=30, follow_redirects=True)
+                pdf_resp.raise_for_status()
+                pdf_b64 = base64.b64encode(pdf_resp.content).decode()
+                log.info(f"PDF fetched from URL for attachment")
+            else:
+                # Legacy local file path
+                pdf_file = Path(pdf_path)
+                if not pdf_file.exists():
+                    raise FileNotFoundError(f"Local PDF not found: {pdf_path}")
+                with open(pdf_file, "rb") as f:
+                    pdf_b64 = base64.b64encode(f.read()).decode()
+                log.info(f"PDF attached from local: {pdf_file.name}")
+
             payload["attachments"] = [{
                 "filename": f"NutriVeda_Plan_{client_name.replace(' ', '_')}.pdf",
                 "content": pdf_b64,
             }]
-            log.info(f"PDF attached: {pdf_file.name}")
         except Exception as e:
             log.warning(f"Could not attach PDF: {e} — sending without attachment")
     else:

@@ -39,6 +39,13 @@ log = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/admin", tags=["Admin"])
 
 
+def _extract_path_or_url(result) -> str:
+    """Extract URL/path from a generation result (dict from Sanity or str from local)."""
+    if isinstance(result, dict):
+        return result.get("url", "")
+    return result or ""
+
+
 # ─── Auth ────────────────────────────────────────────────────────────────────
 
 @router.post("/login", response_model=TokenResponse)
@@ -300,7 +307,7 @@ async def download_pdf(
     _: str = Depends(verify_token),
 ):
     """Download the generated PDF for a plan."""
-    from fastapi.responses import FileResponse
+    from fastapi.responses import FileResponse, Response
     import os
 
     result = await db.execute(select(DietPlan).where(DietPlan.id == plan_id))
@@ -308,7 +315,7 @@ async def download_pdf(
     if not plan:
         raise HTTPException(status_code=404, detail="Plan not found")
 
-    if not plan.pdf_path or not os.path.exists(plan.pdf_path):
+    if not plan.pdf_path:
         raise HTTPException(status_code=404, detail="PDF not yet generated. Approve the plan first.")
 
     sub_result = await db.execute(
@@ -316,11 +323,26 @@ async def download_pdf(
     )
     sub = sub_result.scalar_one_or_none()
     client_name = sub.full_name.replace(" ", "_") if sub else "client"
+    dl_filename = f"NutritionPlan_{client_name}.pdf"
+
+    # Sanity CDN URL — fetch and proxy the bytes
+    if plan.pdf_path.startswith("http"):
+        from services.sanity_storage import fetch_file_bytes
+        pdf_bytes = fetch_file_bytes(plan.pdf_path)
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="{dl_filename}"'},
+        )
+
+    # Legacy local file path
+    if not os.path.exists(plan.pdf_path):
+        raise HTTPException(status_code=404, detail="PDF file not found. Re-approve the plan to regenerate.")
 
     return FileResponse(
         plan.pdf_path,
         media_type="application/pdf",
-        filename=f"NutritionPlan_{client_name}.pdf",
+        filename=dl_filename,
     )
 
 
@@ -331,7 +353,7 @@ async def download_word(
     _: str = Depends(verify_token),
 ):
     """Download the generated Word document for a plan."""
-    from fastapi.responses import FileResponse
+    from fastapi.responses import FileResponse, Response
     import os
 
     result = await db.execute(select(DietPlan).where(DietPlan.id == plan_id))
@@ -344,28 +366,44 @@ async def download_word(
     )
     sub = sub_result.scalar_one_or_none()
     client_name = sub.full_name.replace(" ", "_") if sub else "client"
+    dl_filename = f"NutriVeda_Plan_{client_name}.docx"
+    docx_mime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
     # Generate on-demand if word doc doesn't exist yet
-    if not plan.word_path or not os.path.exists(plan.word_path):
+    needs_generation = (
+        not plan.word_path
+        or (not plan.word_path.startswith("http") and not os.path.exists(plan.word_path))
+    )
+    if needs_generation:
         plan_text = plan.final_plan or plan.generated_plan
         if not plan_text:
             raise HTTPException(status_code=404, detail="No plan text available to generate Word document.")
         from diet.word_export import generate_word_doc
-        word_path = generate_word_doc(
+        word_result = generate_word_doc(
             plan_text,
             sub.full_name if sub else "Client",
             plan.submission_id,
             plan_id,
         )
-        if not word_path:
+        if not word_result:
             raise HTTPException(status_code=500, detail="Word document generation failed.")
-        plan.word_path = word_path
+        plan.word_path = _extract_path_or_url(word_result)
         await db.commit()
+
+    # Sanity CDN URL — fetch and proxy the bytes
+    if plan.word_path.startswith("http"):
+        from services.sanity_storage import fetch_file_bytes
+        doc_bytes = fetch_file_bytes(plan.word_path)
+        return Response(
+            content=doc_bytes,
+            media_type=docx_mime,
+            headers={"Content-Disposition": f'attachment; filename="{dl_filename}"'},
+        )
 
     return FileResponse(
         plan.word_path,
-        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        filename=f"NutriVeda_Plan_{client_name}.docx",
+        media_type=docx_mime,
+        filename=dl_filename,
     )
 
 
@@ -376,7 +414,7 @@ async def download_admin_doc(
     _: str = Depends(verify_token),
 ):
     """Download admin-only knowledge source report for a plan."""
-    from fastapi.responses import FileResponse
+    from fastapi.responses import FileResponse, Response
     import os
 
     result = await db.execute(select(DietPlan).where(DietPlan.id == plan_id))
@@ -392,7 +430,7 @@ async def download_admin_doc(
 
     from diet.word_export import generate_admin_doc
     generated_at = plan.created_at.strftime("%d %B %Y %H:%M") if plan.created_at else None
-    admin_path = generate_admin_doc(
+    admin_result = generate_admin_doc(
         plan_id=plan_id,
         submission_id=plan.submission_id,
         client_name=client_name,
@@ -400,14 +438,28 @@ async def download_admin_doc(
         rag_chunks=plan.rag_chunks or [],
         plan_generated_at=generated_at,
     )
-    if not admin_path:
+    if not admin_result:
         raise HTTPException(status_code=500, detail="Admin report generation failed.")
 
+    admin_path = _extract_path_or_url(admin_result)
     safe_name = client_name.replace(" ", "_")
+    dl_filename = f"NutriVeda_AdminReport_{safe_name}_Plan{plan_id}.docx"
+    docx_mime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+    # Sanity CDN URL — fetch and proxy the bytes
+    if admin_path.startswith("http"):
+        from services.sanity_storage import fetch_file_bytes
+        doc_bytes = fetch_file_bytes(admin_path)
+        return Response(
+            content=doc_bytes,
+            media_type=docx_mime,
+            headers={"Content-Disposition": f'attachment; filename="{dl_filename}"'},
+        )
+
     return FileResponse(
         admin_path,
-        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        filename=f"NutriVeda_AdminReport_{safe_name}_Plan{plan_id}.docx",
+        media_type=docx_mime,
+        filename=dl_filename,
     )
 
 
@@ -675,17 +727,17 @@ async def _generate_pdf_background(
     from diet.word_export import generate_word_doc
 
     try:
-        pdf_path = generate_pdf(plan_text, client_name, submission_id, plan_id)
-        word_path = generate_word_doc(plan_text, client_name, submission_id, plan_id)
+        pdf_result = generate_pdf(plan_text, client_name, submission_id, plan_id)
+        word_result = generate_word_doc(plan_text, client_name, submission_id, plan_id)
 
         async with AsyncSessionLocal() as db:
             result = await db.execute(select(DietPlan).where(DietPlan.id == plan_id))
             plan = result.scalar_one_or_none()
             if plan:
-                if pdf_path:
-                    plan.pdf_path = pdf_path
-                if word_path:
-                    plan.word_path = word_path
+                if pdf_result:
+                    plan.pdf_path = _extract_path_or_url(pdf_result)
+                if word_result:
+                    plan.word_path = _extract_path_or_url(word_result)
                 plan.updated_at = datetime.utcnow()
                 await db.commit()
                 log.info(f"PDF + Word saved for plan #{plan_id}")

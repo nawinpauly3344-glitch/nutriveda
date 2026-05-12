@@ -29,4 +29,10 @@ services:
       - key: RAZORPAY_KEY_SECRET
         sync: false
       - key: CORS_ORIGINS
-        value: https://nutriveda.vercel.app,https://nutriveda-nawinpauly3344-glitch.vercel.app
+        value: https://www.nutrivedahealth.in,https://nutrivedahealth.in,https://nutriveda.vercel.app,https://nutriveda-nawinpauly3344-glitch.vercel.app
+      - key: SANITY_PROJECT_ID
+        sync: false
+      - key: SANITY_DATASET
+        value: production
+      - key: SANITY_WRITE_TOKEN
+        sync: false

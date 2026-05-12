@@ -4,6 +4,7 @@ Generates beautiful, editable .docx files with professional styling.
 Inspired by HealthifyMe, MyFitnessPal, and clinical nutrition report design.
 """
 
+import io
 import os
 import re
 import logging
@@ -623,13 +624,27 @@ def generate_word_doc(
         blocks = _parse_blocks(plan_text)
         _render_blocks(doc, blocks)
 
-        # Save
+        # Save to buffer and upload to Sanity
         safe_name = re.sub(r"[^\w]", "_", client_name.lower())[:30]
         filename = f"nutriveda_plan_{submission_id}_{plan_id}_{safe_name}.docx"
-        filepath = str(WORD_DIR / filename)
-        doc.save(filepath)
-        log.info(f"Word document saved: {filepath}")
-        return filepath
+        buf = io.BytesIO()
+        doc.save(buf)
+        doc_bytes = buf.getvalue()
+
+        try:
+            from services.sanity_storage import upload_file
+            result = upload_file(
+                doc_bytes, filename,
+                content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            )
+            log.info(f"Word doc uploaded to Sanity: {filename} -> {result['url']}")
+            return result  # {"url": "...", "asset_id": "..."}
+        except Exception as e:
+            log.warning(f"Sanity upload failed, falling back to local: {e}")
+            filepath = str(WORD_DIR / filename)
+            (WORD_DIR / filename).write_bytes(doc_bytes)
+            log.info(f"Word document saved locally: {filepath}")
+            return filepath
 
     except Exception as e:
         log.error(f"Word document generation failed: {e}", exc_info=True)
@@ -822,13 +837,27 @@ def generate_admin_doc(
         r_end.font.color.rgb = C_TEXT_GRAY
         p_end.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-        # Save
+        # Save to buffer and upload to Sanity
         safe_name = re.sub(r"[^\w]", "_", client_name.lower())[:20]
         filename = f"nutriveda_admin_sources_{plan_id}_{safe_name}.docx"
-        filepath = str(WORD_DIR / filename)
-        doc.save(filepath)
-        log.info(f"Admin source report saved: {filepath}")
-        return filepath
+        buf = io.BytesIO()
+        doc.save(buf)
+        doc_bytes = buf.getvalue()
+
+        try:
+            from services.sanity_storage import upload_file
+            result = upload_file(
+                doc_bytes, filename,
+                content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            )
+            log.info(f"Admin report uploaded to Sanity: {filename} -> {result['url']}")
+            return result  # {"url": "...", "asset_id": "..."}
+        except Exception as e:
+            log.warning(f"Sanity upload failed, falling back to local: {e}")
+            filepath = str(WORD_DIR / filename)
+            (WORD_DIR / filename).write_bytes(doc_bytes)
+            log.info(f"Admin source report saved locally: {filepath}")
+            return filepath
 
     except Exception as e:
         log.error(f"Admin source report generation failed: {e}", exc_info=True)
